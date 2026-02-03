@@ -50,17 +50,17 @@ class DataNormalizer:
     def _smart_fix_list(match_list: List[Dict], manual_form_str: str, team_name: str):
         if not match_list or not manual_form_str: return
         manual_results = [c.upper() for c in manual_form_str if c.upper() in ['W', 'D', 'L']]
-        
+        
         for i, (match, user_result) in enumerate(zip(match_list, manual_results)):
             current_score = match.get('score', '')
             venue = match.get('venue', 'home')
-            
+            
             system_result = DataNormalizer._get_match_result(current_score, venue)
-            
+            
             if system_result != '?' and system_result != user_result:
                 flipped_score = DataNormalizer._flip_score(current_score)
                 flipped_result = DataNormalizer._get_match_result(flipped_score, venue)
-                
+                
                 if flipped_result == user_result:
                     match['score'] = flipped_score
                     system_result = flipped_result
@@ -76,7 +76,7 @@ class DataNormalizer:
 
         h2h_str = "".join(match_data.get('h2h_recent_form', []) if isinstance(match_data.get('h2h_recent_form'), list) else str(match_data.get('h2h_recent_form', '')))
         DataNormalizer._smart_fix_list(match_data.get('h2h_details', []), h2h_str, "對賽往績")
-        
+        
         return match_data
 
 
@@ -85,13 +85,13 @@ class AdvancedMetrics:
     def _parse_date(date_str: str, current_date: datetime) -> Optional[datetime]:
         if not date_str: return None
         formats = ["%y-%m-%d", "%Y-%m-%d", "%d/%m/%y", "%m-%d", "%d-%m"]
-        
+        
         for fmt in formats:
             try:
                 dt = datetime.strptime(date_str, fmt)
                 if "y" not in fmt and "Y" not in fmt:
                     dt = dt.replace(year=current_date.year)
-                    if dt > current_date + timedelta(days=30): 
+                    if dt > current_date + timedelta(days=30): 
                         dt = dt.replace(year=current_date.year - 1)
                 return dt
             except: continue
@@ -101,7 +101,7 @@ class AdvancedMetrics:
     def sort_matches_by_date(matches_data: List[Dict], current_date: datetime = None) -> List[Dict]:
         if not matches_data: return []
         if current_date is None: current_date = datetime.now()
-        
+        
         valid_matches = []
         for m in matches_data:
             d_str = m.get('date') or m.get('time')
@@ -109,7 +109,7 @@ class AdvancedMetrics:
             if dt:
                 m['_dt_obj'] = dt
                 valid_matches.append(m)
-        
+        
         valid_matches.sort(key=lambda x: x['_dt_obj'], reverse=True)
         return valid_matches
 
@@ -147,20 +147,20 @@ class AdvancedMetrics:
     @staticmethod
     def calculate_fatigue(matches_data: List[Dict], current_match_date: datetime) -> Dict:
         sorted_matches = AdvancedMetrics.sort_matches_by_date(matches_data, current_match_date)
-        
-        if not sorted_matches: 
+        
+        if not sorted_matches: 
             return {'days': 7, 'status': '🟢 體力充沛 (無近期數據)'}
-            
+            
         last_match_date = sorted_matches[0]['_dt_obj']
         days_diff = (current_match_date - last_match_date).days
-        
-        if days_diff < 0: days_diff = 7 
-        
+        
+        if days_diff < 0: days_diff = 7 
+        
         if days_diff <= 3: status = '🔴 極度疲勞 (休息<=3天)'
         elif days_diff <= 5: status = '🟡 輕微疲勞 (休息4-5天)'
         else: status = '🟢 體力充沛'
         return {'days': days_diff, 'status': status}
-        
+        
     @staticmethod
     def calculate_weighted_momentum(form_list: List[str]) -> float:
         if not form_list: return 50.0
@@ -204,11 +204,11 @@ class HandicapHistoryAnalyzer:
         elif abs_h <= 0.75: cat = 'small'
         elif abs_h <= 1.5: cat = 'medium'
         else: cat = 'large'
-        
+        
         data = history.get(cat, {'matches': 0, 'covered': 0})
         matches = data.get('matches', 0)
         covered = data.get('covered', 0)
-        
+        
         rate = covered / matches if matches > 0 else 0.5
         adaptation_score = 50 + (rate - 0.5) * 40
         return {'category': cat, 'cover_rate': rate, 'adaptation_score': adaptation_score}
@@ -239,17 +239,17 @@ class CompanyOddsManagerV229:
         curr_a = odds_data.get('current_away', 0)
         early_h = odds_data.get('early_home')
         early_a = odds_data.get('early_away')
-        
-        data_fixed_msg = None 
+        
+        data_fixed_msg = None 
 
-        if curr_h < 1.6: curr_h += 1.0 
+        if curr_h < 1.6: curr_h += 1.0 
         if curr_a < 1.6: curr_a += 1.0
-        
+        
         if early_h and early_h < 1.6: early_h += 1.0
         if early_a and early_a < 1.6: early_a += 1.0
 
         odds_sum = curr_h + curr_a
-        
+        
         if odds_sum > 4.5 or curr_h > 3.0 or curr_a > 3.0:
             original_h, original_a = curr_h, curr_a
             curr_h = 1.90
@@ -259,18 +259,18 @@ class CompanyOddsManagerV229:
         change = {'home_change': 0, 'trend_description': '平穩'}
         if early_h:
             chg = curr_h - early_h
-            if data_fixed_msg: chg = 0.0 
+            if data_fixed_msg: chg = 0.0 
             desc = '主升' if chg > 0.02 else ('主跌' if chg < -0.02 else '平穩')
             change = {'home_change': chg, 'trend_description': desc}
 
         return {
-            'home_odds': curr_h, 
-            'away_odds': curr_a, 
-            'source': source, 
-            'source_name': self.COMPANIES.get(source, source), 
-            'early_home': early_h, 
-            'early_away': early_a, 
-            'odds_change': change, 
+            'home_odds': curr_h, 
+            'away_odds': curr_a, 
+            'source': source, 
+            'source_name': self.COMPANIES.get(source, source), 
+            'early_home': early_h, 
+            'early_away': early_a, 
+            'odds_change': change, 
             'all_companies_data': self._get_all_companies_comparison(),
             'debug_msg': data_fixed_msg
         }
@@ -283,7 +283,7 @@ class CompanyOddsManagerV229:
         for c in self.available_companies:
             d = self.company_data[c]
             h = d.get('current_home', 0); a = d.get('current_away', 0)
-            if h < 1.0: h += 1.0; 
+            if h < 1.0: h += 1.0; 
             if a < 1.0: a += 1.0
             comp[c] = {'name': self.COMPANIES[c], 'home_odds': h, 'away_odds': a}
         return comp
@@ -346,7 +346,7 @@ class H2HDeepAnalyzer:
                 dt = datetime.strptime(date_str, fmt)
                 try:
                     dt = dt.replace(year=current_year)
-                except ValueError: 
+                except ValueError: 
                     dt = dt.replace(year=current_year, day=28)
                 if dt > now:
                     dt = dt.replace(year=current_year - 1)
@@ -358,7 +358,7 @@ class H2HDeepAnalyzer:
     def _get_time_weight(match_date_str: str) -> float:
         if not match_date_str: return 1.0
         match_dt = H2HDeepAnalyzer._parse_h2h_date(match_date_str)
-        if not match_dt: return 1.0 
+        if not match_dt: return 1.0 
         days_diff = (datetime.now() - match_dt).days
         if days_diff < 180: return 1.2
         elif days_diff < 365: return 1.0
@@ -368,20 +368,20 @@ class H2HDeepAnalyzer:
 
     @staticmethod
     def analyze_h2h_handicap(h2h_matches: List[Dict], current_handicap: float) -> Dict:
-        if not h2h_matches: 
+        if not h2h_matches: 
             return {'nemesis_relationship': '無歷史數據', 'similar_handicap_cover_rate': 0.5}
-        
+        
         total_weight = 0.0
         weighted_my_wins = 0.0
         similar_hdp_wins = 0
         similar_count = 0
-        
+        
         for m in h2h_matches:
             try:
                 score_str = m.get('score', '')
                 if '-' not in score_str: continue
                 home_score, away_score = map(int, score_str.split('-'))
-                venue = m.get('venue', 'home') 
+                venue = m.get('venue', 'home') 
                 date_str = m.get('date', '')
                 weight = H2HDeepAnalyzer._get_time_weight(date_str)
                 is_my_win = False
@@ -392,10 +392,10 @@ class H2HDeepAnalyzer:
                 else:
                     if away_score > home_score: is_my_win = True
                     my_margin = away_score - home_score
-                
+                
                 total_weight += weight
                 if is_my_win: weighted_my_wins += weight
-                    
+                    
                 hist_hdp = m.get('handicap', 0)
                 if abs(hist_hdp - current_handicap) <= 0.25:
                     similar_count += 1
@@ -407,17 +407,17 @@ class H2HDeepAnalyzer:
 
         weighted_win_rate = weighted_my_wins / total_weight
         nemesis = '互有勝負'
-        if weighted_win_rate >= 0.65: 
-            nemesis = f'主隊明顯剋星 (加權勝率{weighted_win_rate:.0%})' 
+        if weighted_win_rate >= 0.65: 
+            nemesis = f'主隊明顯剋星 (加權勝率{weighted_win_rate:.0%})' 
         elif weighted_win_rate <= 0.25:
             nemesis = f'客隊明顯剋星 (加權勝率{1-weighted_win_rate:.0%})'
-        
+        
         sim_rate = similar_hdp_wins / similar_count if similar_count > 0 else 0.5
         return {'nemesis_relationship': nemesis, 'similar_handicap_cover_rate': sim_rate}
-        
+        
     @staticmethod
     def simulate_handicap_history(h2h_matches: List[Dict], current_handicap: float) -> Dict:
-        if not h2h_matches: 
+        if not h2h_matches: 
             return {'backtest_win_rate': 0.5, 'msg': '無歷史對賽'}
 
         wins = 0; pushes = 0; total = 0
@@ -431,7 +431,7 @@ class H2HDeepAnalyzer:
                 if adjusted_h_score > a_score: wins += 1
                 elif adjusted_h_score == a_score: pushes += 1
             except: continue
-            
+            
         if total == 0: return {'backtest_win_rate': 0.5, 'msg': '無有效比分'}
         win_rate = (wins + pushes) / total
         msg = f"歷史盤口回測(主{current_handicap:+.1f}): 近{total}場 贏{wins} 走{pushes} ({win_rate:.0%}不敗)"
@@ -448,13 +448,13 @@ class MultiDimensionalRiskEvaluator:
         cons_score = cons_map.get(consistency, 50)
         adapt_risk = 100 - adaptation_score
         total_risk = (draw_score * 0.2) + (defeat_score * 0.2) + (def_score * 0.25) + (cons_score * 0.2) + (adapt_risk * 0.15)
-        
+        
         if total_risk >= 70: level = '🔴 極高風險'
         elif total_risk >= 50: level = '🟠 高風險'
         elif total_risk >= 30: level = '🟡 中風險'
         else: level = '🟢 低風險'
         return {'score': total_risk, 'level': level, 'details': f"防守{def_score}|平局{draw_score:.0f}|一致性{cons_score}"}
-        
+        
 class LineupImpactAnalyzer:
     @staticmethod
     def analyze_injury_impact(text: str, team_name: str) -> Tuple[float, str]:
@@ -462,8 +462,8 @@ class LineupImpactAnalyzer:
         penalty = 0.0
         details = []
         keywords = {
-            '被徵召': 15.0, '國家隊': 15.0, '十字韌帶': 12.0, '骨折': 10.0, 
-            '手術': 10.0, '頭號射手': 12.0, '核心': 10.0, '隊長': 8.0, 
+            '被徵召': 15.0, '國家隊': 15.0, '十字韌帶': 12.0, '骨折': 10.0, 
+            '手術': 10.0, '頭號射手': 12.0, '核心': 10.0, '隊長': 8.0, 
             '主力': 6.0, '停賽': 5.0, '紅牌': 5.0, '軟骨': 8.0, '撕裂': 5.0
         }
         for kw, score in keywords.items():
@@ -509,12 +509,12 @@ class SpecificHandicapTrendAnalyzer:
                 if abs(hist_hdp - current_hdp) < 0.05:
                     target_matches.append(m)
             except: continue
-            
+            
         if not target_matches: return 0.0, ""
-        
+        
         win_cover = 0
         total = len(target_matches)
-        
+        
         for m in target_matches:
             try:
                 score = m.get('score', '0-0')
@@ -525,11 +525,11 @@ class SpecificHandicapTrendAnalyzer:
                 elif current_hdp < 0:
                     if diff > current_hdp: win_cover += 1
             except: pass
-            
+            
         win_rate = win_cover / total
         penalty = 0.0
         msg = ""
-        
+        
         if total >= 3:
             if win_rate <= 0.2:
                 penalty = -15.0
@@ -537,20 +537,20 @@ class SpecificHandicapTrendAnalyzer:
             elif win_rate >= 0.8:
                 penalty = 10.0
                 msg = f"🔥 [盤路強勢] {team_type}在盤口({current_hdp})下近{total}場贏盤{win_rate:.0%}，特別擅長"
-                
+                
         return penalty, msg
 
 class HandicapRuleGenerator:
     @staticmethod
     def get_payout_rules(handicap_val: float, rec_side: str) -> str:
         eff_hdp = 0.0
-        if rec_side == 'home': eff_hdp = handicap_val 
+        if rec_side == 'home': eff_hdp = handicap_val 
         else: eff_hdp = -handicap_val
         is_giving = eff_hdp > 0
         abs_eff = abs(eff_hdp)
         base = int(abs_eff)
         fraction = abs_eff - base
-        
+        
         if fraction == 0.0:
             if abs_eff == 0: return "平手盤：贏球全贏，打和走盤"
             if is_giving: return f"贏 {base+1} 球或以上全贏，剛好贏 {base} 球走盤"
@@ -558,14 +558,14 @@ class HandicapRuleGenerator:
         elif abs(fraction - 0.5) < 0.01:
             if is_giving: return f"贏 {base+1} 球或以上全贏，否則全輸"
             else: return f"輸 {base} 球或不輸全贏，輸 {base+1} 球全輸"
-        elif abs(fraction - 0.25) < 0.01: 
+        elif abs(fraction - 0.25) < 0.01: 
             if is_giving:
                 if base == 0: return "贏球全贏，打和輸半"
                 return f"贏 {base+1} 球全贏，剛好贏 {base} 球輸半"
             else:
                 if base == 0: return "贏球全贏，打和贏半"
-                return f"輸 {base} 球或不輸全贏，剛好輸 {base} 球贏半" 
-        elif abs(fraction - 0.75) < 0.01: 
+                return f"輸 {base} 球或不輸全贏，剛好輸 {base} 球贏半" 
+        elif abs(fraction - 0.75) < 0.01: 
             if is_giving: return f"贏 {base+2} 球全贏，剛好贏 {base+1} 球贏半"
             else: return f"輸 {base} 球或不輸全贏，剛好輸 {base+1} 球輸半"
         return f"規則計算中 (盤口:{eff_hdp:.2f})"
@@ -593,8 +593,8 @@ class MarketResonanceV6:
         kelly_data = match_data.get('manual_kelly', {})
         k_early = kelly_data.get('early', 0)
         k_curr = kelly_data.get('current', 0)
-        
-        if euro_home == 0: 
+        
+        if euro_home == 0: 
             return {'theo_diff': 0, 'ou_support': 'Neutral', 'kelly_signal': 'None', 'msg': '無數據'}
 
         theo_hdp = MarketResonanceV6.get_theoretical_handicap(euro_home)
@@ -606,7 +606,7 @@ class MarketResonanceV6:
         elif current_handicap < 0:
             if ou_trend == 'OverDrop': support = 'Away'
             elif ou_trend == 'UnderDrop': support = 'Home'
-            
+            
         kelly_signal = 'Neutral'
         kelly_diff = 0
         if k_early > 0 and k_curr > 0:
@@ -639,7 +639,7 @@ class FinalJudgeV37_Clean:
         h_corr = 0.0
         a_corr = 0.0
         strategy_tag = "V6.9 綜合邏輯"
-        
+        
         h_inj = h_data.get('injury_penalty', 0)
         a_inj = a_data.get('injury_penalty', 0)
         h_mom = h_data.get('momentum', 0)
@@ -656,9 +656,9 @@ class FinalJudgeV37_Clean:
         a_win_rate = a_data.get('win_rate', 0)
         handicap = env_data.get('handicap', 0)
         has_nemesis = env_data.get('nemesis', False)
-        base_score_diff = abs(h_mom - a_mom) 
+        base_score_diff = abs(h_mom - a_mom) 
 
-        CATASTROPHIC_INJURY = 25.0 
+        CATASTROPHIC_INJURY = 25.0 
         h_critical = (h_inj >= CATASTROPHIC_INJURY)
         a_critical = (a_inj >= CATASTROPHIC_INJURY)
         if h_critical: self.log.append(f"🚑 [紅線] 主隊傷停災難({h_inj:.1f})，戰力重創")
@@ -679,21 +679,21 @@ class FinalJudgeV37_Clean:
         LEAK_THRESHOLD = 1.8
         h_leak = h_conceded > LEAK_THRESHOLD
         a_leak = a_conceded > LEAK_THRESHOLD
-        if h_leak: 
+        if h_leak: 
             h_corr -= 5.0
             self.log.append(f"🧱 [防守漏水] 主隊場均失球{h_conceded:.1f}，基本面扣分-5.0")
-        if a_leak: 
+        if a_leak: 
             a_corr -= 5.0
             self.log.append(f"🧱 [防守漏水] 客隊場均失球{a_conceded:.1f}，基本面扣分-5.0")
 
-        SMART_RISE = 0.06 
+        SMART_RISE = 0.06 
         money_bonus = 10.0
-        if base_score_diff < 10: money_bonus = 5.0 
+        if base_score_diff < 10: money_bonus = 5.0 
         if h_leak or h_dead: money_bonus *= 0.5
         if a_leak or a_dead: money_bonus *= 0.5
 
         if rise_a > SMART_RISE and not h_critical and not has_nemesis:
-            if h_leak or h_dead: self.log.append(f"⚠️ [資金虛火] 主隊基本面崩壞，聰明錢權重減半") 
+            if h_leak or h_dead: self.log.append(f"⚠️ [資金虛火] 主隊基本面崩壞，聰明錢權重減半") 
             h_corr += money_bonus
             self.log.append(f"💰 [聰明錢] 資金流向主隊，修正+{money_bonus:.1f}")
             strategy_tag = "資金流向"
@@ -706,11 +706,11 @@ class FinalJudgeV37_Clean:
 
         if h_inj > 15.0 and abs(handicap) < 0.5 and rise_h < 0.05:
             if not h_dead:
-                refund = h_inj * 0.6 
+                refund = h_inj * 0.6 
                 h_corr += refund
                 self.log.append(f"🎭 [傷情虛實] 主傷重但盤口硬，莊家不懼，回補+{refund:.1f}")
             else: self.log.append(f"💀 [傷情虛實] 主隊進攻啞火，拒絕回補傷病分！")
-            
+            
         if a_inj > 15.0 and abs(handicap) < 0.5 and rise_a < 0.05:
             if not a_dead:
                 refund = a_inj * 0.6
@@ -746,7 +746,7 @@ class FinalJudgeV37_Clean:
         bt_rate = backtest.get('backtest_win_rate', 0.5)
         bt_total = backtest.get('total', 0)
         current_hdp = env_data.get('handicap', 0)
-        
+        
         if bt_total >= 3:
             if current_hdp >= 1.0 and bt_rate >= 0.7:
                 bonus = 20.0
@@ -755,7 +755,7 @@ class FinalJudgeV37_Clean:
                 strategy_tag = "盤路回測"
             elif current_hdp <= -1.0 and bt_rate <= 0.3:
                 penalty = -20.0
-                h_corr += penalty 
+                h_corr += penalty 
                 self.log.append(f"📉 [盤路回測] 穿盤能力不足！歷史讓球({current_hdp})贏盤率僅{bt_rate:.0%}，主修正{penalty}")
 
         if h_inj > 15.0 and h_win_rate > 0.5 and not h_dead:
@@ -769,7 +769,7 @@ class FinalJudgeV37_Clean:
         theo_diff = market.get('theo_diff', 0)
         ou_support = market.get('ou_support', 'Neutral')
         kelly_sig = market.get('kelly_signal', 'Neutral')
-        
+        
         if theo_diff >= 0.5:
             penalty = -15.0
             if handicap > 0: h_corr += penalty
@@ -787,8 +787,8 @@ class FinalJudgeV37_Clean:
         elif ou_support == 'Away':
             a_corr += 8.0
             self.log.append(f"🌊 [大小共振] 大球利好客隊，修正+8.0")
-            
-        if kelly_sig in ['Home_Guard', 'Guard']: 
+            
+        if kelly_sig in ['Home_Guard', 'Guard']: 
             h_corr += 10.0
             self.log.append("💰 [凱利防範] 主勝防範，修正+10.0")
         elif kelly_sig in ['Home_SuperGuard', 'SuperGuard']:
@@ -819,17 +819,17 @@ class PrecisionValidatorV50_Ultimate:
         confidence = 0.0
         decision_log = []
         status = "SKIP"
-        
+        
         fundamental_dir = "HOME" if base_score_diff > 0 else "AWAY"
         fundamental_strength = abs(base_score_diff)
         pin_chg = odds_trend.get('pin_change', 0.0)
-        
+        
         def calculate_injury_score(text):
             if not text: return 0
             score = 0
             weights = {
-                '十字韌帶': 15, '阿基里斯': 15, '賽季報銷': 15, '骨折': 12, 
-                '斷裂': 12, '手術': 12, '重傷': 12, '撕裂': 8, 
+                '十字韌帶': 15, '阿基里斯': 15, '賽季報銷': 15, '骨折': 12, 
+                '斷裂': 12, '手術': 12, '重傷': 12, '撕裂': 8, 
                 '半月板': 8, '缺陣': 2, '停賽': 3, '國家隊': 2, '發炎': 2
             }
             for keyword, weight in weights.items():
@@ -840,10 +840,10 @@ class PrecisionValidatorV50_Ultimate:
         a_inj_text = match_data.get('away_injury_text', '')
         h_disaster_score = calculate_injury_score(h_inj_text)
         a_disaster_score = calculate_injury_score(a_inj_text)
-        
+        
         h_raw_form = match_data.get('home_recent_form', [])
         a_raw_form = match_data.get('away_recent_form', [])
-        
+        
         def get_handicap_rate(form_data):
             text = str(form_data)
             win = text.count('贏') + text.count('赢')
@@ -858,19 +858,19 @@ class PrecisionValidatorV50_Ultimate:
 
         home_stats = match_data.get('home_stats', {})
         away_stats = match_data.get('away_stats', {})
-        
+        
         a_away_win_rate = away_stats.get('away_win_rate', 0.11)
         h_conceded = home_stats.get('conceded_avg', 1.0)
         a_conceded = away_stats.get('conceded_avg', 2.4)
         h_goals = home_stats.get('goals_scored', 20)
         a_goals = away_stats.get('goals_scored', 26)
-        
+        
         h2h_form = match_data.get('h2h_recent_form', [])
         h2h_wins = str(h2h_form).count('W')
         is_h2h_nemesis = (len(h2h_form) >= 3 and h2h_wins == 0)
 
         CRITICAL_INJURY = 30
-        
+        
         if h_disaster_score >= CRITICAL_INJURY:
             decision_log.append(f"🚑 [結構崩壞] 主隊傷病分({h_disaster_score})爆表")
             if a_goals >= h_goals or a_handicap_rate >= 0.3:
@@ -881,7 +881,7 @@ class PrecisionValidatorV50_Ultimate:
                 }
             else:
                 decision_log.append("⚠️ 客隊進攻太弱，可能無法利用主隊傷病")
-        
+        
         if a_disaster_score >= CRITICAL_INJURY:
             decision_log.append(f"🚑 [結構崩壞] 客隊傷病分({a_disaster_score})爆表")
             if h_goals >= a_goals or h_handicap_rate >= 0.3:
@@ -895,10 +895,10 @@ class PrecisionValidatorV50_Ultimate:
 
         if fundamental_dir == "HOME" and is_h2h_nemesis:
             return {'status': "SKIP", 'confidence': 0, 'log': f"🛑 [天敵紅線] 主隊遇剋星(近{len(h2h_form)}場0勝)"}
-            
+            
         if fundamental_dir == "HOME" and h_handicap_rate <= 0.2:
             return {'status': "SKIP", 'confidence': 0, 'log': f"🛑 [盤路毒藥] 主隊贏盤率極低({h_handicap_rate:.0%})"}
-        
+        
         if fundamental_dir == "AWAY" and a_handicap_rate <= 0.2:
             return {'status': "SKIP", 'confidence': 0, 'log': f"🛑 [盤路毒藥] 客隊贏盤率極低({a_handicap_rate:.0%})"}
 
@@ -907,36 +907,36 @@ class PrecisionValidatorV50_Ultimate:
             decision_log.append(f"⚠️ [客場蟲] 客勝率僅 {a_away_win_rate:.0%}")
             sniper_penalty -= 20
         if fundamental_dir == "AWAY" and a_conceded > 2.0:
-                        decision_log.append(f"⚠️ [防守漏水] 客隊場均失球 {a_conceded}")
+            decision_log.append(f"⚠️ [防守漏水] 客隊場均失球 {a_conceded}")
             sniper_penalty -= 15
         elif fundamental_dir == "HOME" and h_conceded > 2.0:
             decision_log.append(f"⚠️ [防守漏水] 主隊場均失球 {h_conceded}")
             sniper_penalty -= 15
-            
-        opponent_rank = match_data.get('opponent_rank', 9) 
-        if fundamental_dir == "HOME" and opponent_rank <= 9 and h_wins == 0: 
+            
+        opponent_rank = match_data.get('opponent_rank', 9) 
+        if fundamental_dir == "HOME" and opponent_rank <= 9 and h_wins == 0: 
              decision_log.append(f"⚠️ [遇強即死] 主隊對陣強隊無勝績")
              sniper_penalty -= 10
 
         if h_disaster_score >= 25 and h_disaster_score < 30:
             decision_log.append(f"🚑 [重傷] 主隊傷病嚴重({h_disaster_score})")
             if fundamental_dir == "AWAY": sniper_penalty += 15
-            
+            
         if a_disaster_score >= 25 and a_disaster_score < 30:
             decision_log.append(f"🚑 [重傷] 客隊傷病嚴重({a_disaster_score})")
             if fundamental_dir == "HOME": sniper_penalty += 15
 
         final_strength = fundamental_strength + sniper_penalty
-        
+        
         market_dir = "NEUTRAL"
         NOISE_THRESHOLD = 0.05
         if pin_chg < -NOISE_THRESHOLD: market_dir = "HOME"
         elif pin_chg > NOISE_THRESHOLD: market_dir = "AWAY"
-        
+        
         decision_log.append(f"📊 修正實力: {final_strength:.1f} | 💰 資金: {market_dir}")
 
         if fundamental_dir == market_dir:
-            if final_strength > 10: 
+            if final_strength > 10: 
                 status = f"BET_{fundamental_dir}"
                 confidence = 0.85
                 if (fundamental_dir == "HOME" and h_handicap_rate > 0.6) or \
@@ -970,7 +970,7 @@ class PrecisionValidatorV50_Ultimate:
                 else:
                     handicap_ok = (fundamental_dir == "HOME" and h_handicap_rate > 0.5) or \
                                   (fundamental_dir == "AWAY" and a_handicap_rate > 0.5)
-                    
+                    
                     if final_strength > 20 and handicap_ok:
                         status = f"BET_{fundamental_dir}"
                         confidence = 0.65
@@ -996,7 +996,7 @@ class DataInjector:
     def inject_manual_data(text_data: str, match_data: dict) -> dict:
         if not text_data: return match_data
         clean_text = text_data.replace('：', ':').replace('(', ' ').replace(')', ' ')
-        
+        
         if 'manual_1x2' not in match_data:
             match_data['manual_1x2'] = {'early': 0.0, 'current': 0.0}
         if 'manual_kelly' not in match_data:
@@ -1015,7 +1015,7 @@ class DataInjector:
         pattern = r":.*?初\s*([\d\.]+)\s*/\s*([\d\.]+).*?即\s*([\d\.]+)\s*/\s*([\d\.]+)"
         pin_match = re.search(r"Pin" + pattern, clean_text, re.IGNORECASE)
         b365_match = re.search(r"365" + pattern, clean_text, re.IGNORECASE)
-        
+        
         active = pin_match if pin_match else b365_match
         if active:
             e_h, e_a, c_h, c_a = map(float, active.groups())
@@ -1044,7 +1044,7 @@ class DataInjector:
         a_ga = re.search(r"(?:客|Away)\s*(?:失球|GA|Conceded)[:\s]*(\d+)", clean_text, re.IGNORECASE)
         if h_ga: match_data['home_goals_conceded'] = int(h_ga.group(1))
         if a_ga: match_data['away_goals_conceded'] = int(a_ga.group(1))
-        
+        
         h_gf = re.search(r"(?:主|Home)\s*(?:入球|GF|Scored)[:\s]*(\d+)", clean_text, re.IGNORECASE)
         a_gf = re.search(r"(?:客|Away)\s*(?:入球|GF|Scored)[:\s]*(\d+)", clean_text, re.IGNORECASE)
         if h_gf: match_data['home_goals_scored'] = int(h_gf.group(1))
@@ -1075,14 +1075,14 @@ class DataInjector:
             line = line.strip()
             if not line: continue
             score_match = re.search(r'\b(\d+)\s*[-:]\s*(\d+)\b', line)
-            
+            
             if score_match and '.' not in score_match.group(0):
                 score = score_match.group(0).replace(':', '-')
                 dm = re.search(r'\d{1,2}[-/]\d{1,2}', line)
                 m_date = dm.group(0) if dm else f"{curr_year}-01-01"
                 s_idx = line.find(score_match.group(0))
                 item = {'date': m_date, 'score': score}
-                
+                
                 if t_home in line and t_away in line:
                     item['venue'] = 'home' if line.find(t_home) < s_idx else 'away'
                     h2h.append(item)
@@ -1126,7 +1126,7 @@ class DataInjector:
         if away_rec:
             match_data['away_recent_matches_detailed'] = away_rec
             match_data['away_recent_form'] = to_form(away_rec)
-            
+            
         return match_data
 
 
@@ -1214,30 +1214,30 @@ class SmartBettingSystemV293:
                 score_probs[(h,a)] = p
         heavy_defeat = sum(p for (h,a), p in score_probs.items() if abs(h-a) >= 3)
         return {'home_expected_goals': h_exp, 'away_expected_goals': a_exp, 'score_probabilities': score_probs, 'heavy_defeat_risk': heavy_defeat}
-    
+    
     def _normalize_handicap_diff(self, target_hdp: float, ref_hdp: float, ref_odds: float = None, home_rank: int = 0, away_rank: int = 0) -> Tuple[float, str, bool]:
         if ref_hdp is None or target_hdp == ref_hdp: return 0.0, "", False
-        
+        
         diff = abs(ref_hdp) - abs(target_hdp)
         correction = 0.0; msg = ""; ban_triggered = False
-        
+        
         is_home_rel_weak = (home_rank - away_rank) >= 4
         is_away_rel_weak = (away_rank - home_rank) >= 4
-        
-        if diff > 0.1: 
+        
+        if diff > 0.1: 
             if (target_hdp > 0 and is_home_rel_weak) or (target_hdp < 0 and is_away_rel_weak):
                 correction = 0.0; ban_triggered = True
                 msg = f"⚓ [錨定禁令] 讓球方相對弱勢(Rank差>4)，Pin深盤視為誘盤，取消加分"
             else:
                 correction = 12.0
                 msg = f"⚓ [盤口錨定] Pin盤({ref_hdp})較深，本盤({target_hdp})門檻低具優勢"
-        elif diff < -0.1: 
+        elif diff < -0.1: 
             correction = -15.0
             msg = f"⚠️ [盤口錨定] Pin盤({ref_hdp})較淺，本盤({target_hdp})過度強勢需防冷"
         else:
             correction = 0.0
             msg = f"⚓ [盤口錨定] 盤口一致(Diff:{diff:.2f})，無修正"
-            
+            
         return correction, msg, ban_triggered
 
     def _detect_defense_collapse_v223(self, team, avg_conc, form, match_type):
@@ -1270,7 +1270,7 @@ class SmartBettingSystemV293:
             except: pass
 
         handicap_info = self.handicap_dict.identify_handicap(match_data['handicap'])
-        target_hdp_val = handicap_info['value'] 
+        target_hdp_val = handicap_info['value'] 
         pin_hdp_input = match_data.get('pin_handicap', match_data['handicap'])
         pin_hdp_val = self.handicap_dict.identify_handicap(pin_hdp_input)['value']
         b365_hdp_input = match_data.get('b365_handicap', match_data['handicap'])
@@ -1278,7 +1278,7 @@ class SmartBettingSystemV293:
 
         league_info = self.league_adapter.get_league_adjustments(match_data.get('league', 'DEFAULT'))
         home_ranking = match_data['home_ranking']; away_ranking = match_data['away_ranking']
-        
+        
         home_perf = self.home_away_analyzer.analyze_home_performance(match_data.get('home_home_matches', 0), match_data.get('home_home_wins', 0), 0, 0, match_data.get('home_home_goals_for', 0), 0)
         away_perf = self.home_away_analyzer.analyze_away_performance(match_data.get('away_away_matches', 0), match_data.get('away_away_wins', 0), 0, 0, match_data.get('away_away_goals_for', 0), 0)
         home_hdp_perf = self.handicap_history_analyzer.analyze_handicap_performance(match_data.get('home_handicap_history', {}), handicap_info['value'])
@@ -1286,8 +1286,8 @@ class SmartBettingSystemV293:
 
         home_base_score = home_perf['home_advantage_score'] if home_perf['home_advantage_score'] > 50 else (20 - home_ranking) * 5 + league_info['home_bonus']
         away_base_score = away_perf['away_strength_score'] if away_perf['away_strength_score'] > 50 else (20 - away_ranking) * 5
-        home_form_score = 70; away_form_score = 70 
-        
+        home_form_score = 70; away_form_score = 70 
+        
         poisson_result = None
         if self.enable_poisson:
             poisson_result = self._poisson_analysis(match_data.get('home_goals_scored', 0)/5.0, match_data.get('away_goals_scored', 0)/5.0, match_data.get('home_goals_conceded', 0)/5.0, match_data.get('away_goals_conceded', 0)/5.0, league_info['avg_goals'], handicap_info['value'], home_ranking, away_ranking)
@@ -1295,10 +1295,10 @@ class SmartBettingSystemV293:
         home_collapse = self._detect_defense_collapse_v223(match_data['home_team'], match_data.get('home_goals_conceded', 0)/5.0, match_data['home_recent_form'], match_type)
         away_collapse = self._detect_defense_collapse_v223(match_data['away_team'], match_data.get('away_goals_conceded', 0)/5.0, match_data['away_recent_form'], match_type)
         home_bonus = league_info['home_bonus']
-        
+        
         h2h_deep = self.h2h_deep_analyzer.analyze_h2h_handicap(match_data.get('h2h_details', []), handicap_info['value'])
         h2h_backtest = self.h2h_deep_analyzer.simulate_handicap_history(match_data.get('h2h_details', []), handicap_info['value'])
-        
+        
         if 'h2h_recent_form' in match_data:
             h2h_form_raw = match_data['h2h_recent_form']
             h2h_str = "".join(h2h_form_raw).upper() if isinstance(h2h_form_raw, list) else str(h2h_form_raw).upper()
@@ -1314,7 +1314,7 @@ class SmartBettingSystemV293:
         away_total_score = away_base_score * 0.3 + away_form_score * 0.3 + 70 * 0.2
         home_total_score += (home_hdp_perf['adaptation_score'] - 50) * 0.1
         away_total_score += (away_hdp_perf['adaptation_score'] - 50) * 0.1
-        
+        
         if '主隊明顯剋星' in h2h_deep['nemesis_relationship']: home_total_score += 5
         elif '客隊明顯剋星' in h2h_deep['nemesis_relationship']: away_total_score += 5
 
@@ -1351,18 +1351,18 @@ class SmartBettingSystemV293:
         h_mom_val = AdvancedMetrics.calculate_weighted_momentum(h_recent_rev)
         a_mom_val = AdvancedMetrics.calculate_weighted_momentum(a_recent_rev)
         mom_diff_val = h_mom_val - a_mom_val
-        
+        
         correction_msg = []; home_correction = 0; away_correction = 0
         force_no_recommend = False
         veto_triggered = False; veto_msg = "無"
         is_anchor_ban_triggered = False
         has_nemesis_exemption = False; nemesis_type = h2h_deep.get('nemesis_relationship', '')
-        match_data['forced_draw_risk_increase'] = False 
+        match_data['forced_draw_risk_increase'] = False 
         strategy_used = "🧠 V2.9.9 綜合動態運算"
-        
+        
         home_odds = match_data.get('home_odds', 0); away_odds = match_data.get('away_odds', 0)
         handicap_val = handicap_info.get('value', 0)
-        
+        
         pin_data = match_data.get('company_odds', {}).get('PIN', {})
         b365_data = match_data.get('company_odds', {}).get('B365', {})
         pin_chg_h = (pin_data.get('current_home', 0) - pin_data.get('early_home', 0)) if pin_data.get('early_home') else 0
@@ -1386,10 +1386,10 @@ class SmartBettingSystemV293:
 
         h_inj_text = match_data.get('home_injury_text', '')
         a_inj_text = match_data.get('away_injury_text', '')
-        
+        
         h_inj_pen, h_inj_msg = self.lineup_analyzer.analyze_injury_impact(h_inj_text, match_data['home_team'])
         a_inj_pen, a_inj_msg = self.lineup_analyzer.analyze_injury_impact(a_inj_text, match_data['away_team'])
-        
+        
         if h_inj_pen > 0: home_correction -= h_inj_pen; correction_msg.append(h_inj_msg)
         if a_inj_pen > 0: away_correction -= a_inj_pen; correction_msg.append(a_inj_msg)
 
@@ -1428,7 +1428,7 @@ class SmartBettingSystemV293:
             'injury_penalty': h_inj_pen,
             'rank': int(home_ranking) if str(home_ranking).isdigit() else 99,
             'win_rate': calculate_win_rate_helper(match_data.get('home_recent_form', [])),
-            'recent_form': match_data.get('home_recent_form', []), 
+            'recent_form': match_data.get('home_recent_form', []), 
             'momentum': h_mom_val,
             'fatigue_days': h_fatigue['days'],
             'conceded_avg': h_conceded_avg,
@@ -1450,14 +1450,14 @@ class SmartBettingSystemV293:
             'rise_home': rise_home,
             'rise_away': rise_away
         }
-        
+        
         temp_h_exp = poisson_result['home_expected_goals'] if poisson_result else 1.5
         temp_a_exp = poisson_result['away_expected_goals'] if poisson_result else 1.0
         temp_prob_h = self.calculate_handicap_coverage(temp_h_exp, temp_a_exp, handicap_val)
         temp_prob_a = self.calculate_handicap_coverage(temp_a_exp, temp_h_exp, -handicap_val)
         mom_side_check = "home" if mom_diff_val > 0 else "away"
-        
-        current_month = 5 
+        
+        current_month = 5 
         try:
             if 'date' in match_data:
                 date_str = str(match_data['date'])
@@ -1489,9 +1489,9 @@ class SmartBettingSystemV293:
         home_correction += judge_h_corr
         away_correction += judge_a_corr
         correction_msg.extend(judge_logs)
-        
+        
         if judge_strategy: strategy_used = judge_strategy
-            
+            
         is_panic_exemption_triggered = arbiter.flags['is_panic_exemption_triggered']
         veto_triggered = arbiter.flags['veto_triggered']
         veto_msg = arbiter.flags['veto_msg']
@@ -1523,34 +1523,34 @@ class SmartBettingSystemV293:
         v271_home_adjust = style_h_bonus + h_trend_score + poisson_h_bonus
         v271_away_adjust = style_a_bonus + a_trend_score + poisson_a_bonus
         home_total_score += v271_home_adjust; away_total_score += v271_away_adjust
-        
+        
         h_momentum = AdvancedMetrics.calculate_weighted_momentum(h_recent_rev)
         a_momentum = AdvancedMetrics.calculate_weighted_momentum(a_recent_rev)
         mom_diff = h_momentum - a_momentum
-        mom_correction = mom_diff * 0.25 
+        mom_correction = mom_diff * 0.25 
         home_total_score += mom_correction
         mom_msg = f"主{h_momentum:.0f} vs 客{a_momentum:.0f}"
 
         quarter_correction = 0.0; quarter_msg = ""
-        is_quarter = (abs(handicap_val) * 4) % 2 != 0 
+        is_quarter = (abs(handicap_val) * 4) % 2 != 0 
         if is_quarter:
             league_draw_rate = league_info.get('draw_rate', 0.27)
-            if abs(handicap_val) == 0.25 and league_draw_rate > 0.28: 
+            if abs(handicap_val) == 0.25 and league_draw_rate > 0.28: 
                 if handicap_val > 0: quarter_correction -= 8.0; quarter_msg = "⚖️ [半盤博弈] 主讓平半且平局率高，上盤高險"
                 else: quarter_correction += 8.0; quarter_msg = "⚖️ [半盤博弈] 客讓平半且平局率高，上盤高險"
             home_total_score += quarter_correction
 
         home_total_score = max(10, min(99, home_total_score))
         away_total_score = max(10, min(99, away_total_score))
-        
+        
         if match_data.get('forced_risk_level') == '🔴 極高風險':
             home_total_score = 50.0; away_total_score = 50.0
-        
+        
         score_diff = home_total_score - away_total_score
         home_win_prob = max(0.1, min(0.9, 0.5 + (score_diff / 200)))
         home_kelly = (home_win_prob * home_odds - 1) / (home_odds - 1) if home_odds > 1 else 0
         away_kelly = ((1-home_win_prob) * away_odds - 1) / (away_odds - 1) if away_odds > 1 else 0
-        
+        
         if home_kelly > away_kelly:
             rec_side = 'home'; rec_team = match_data['home_team']; rec_kelly = max(0, home_kelly); rec_odds = home_odds
         else:
@@ -1560,48 +1560,48 @@ class SmartBettingSystemV293:
         if match_data.get('forced_draw_risk_increase'): draw_risk_val = 0.45
 
         risk_eval = self.risk_evaluator.evaluate_comprehensive_risk(
-            draw_risk=draw_risk_val, heavy_defeat_risk=poisson_result['heavy_defeat_risk'], 
-            defense_level=home_collapse['level'], consistency='高度一致', 
+            draw_risk=draw_risk_val, heavy_defeat_risk=poisson_result['heavy_defeat_risk'], 
+            defense_level=home_collapse['level'], consistency='高度一致', 
             adaptation_score=home_hdp_perf['adaptation_score']
         )
         if match_data.get('forced_risk_level') == '🔴 極高風險':
             risk_eval['score'] = 99; risk_eval['level'] = '🔴 極高風險(鎖定)'
 
         score_diff = home_total_score - away_total_score
-            
+            
         pin_chg_check = 0.0
         if 'company_odds' in match_data and 'PIN' in match_data['company_odds']:
              p = match_data['company_odds']['PIN']
              if p.get('early_home') and p.get('current_home'):
                  pin_chg_check = p['current_home'] - p['early_home']
-            
+            
         match_data['home_stats'] = {
             'home_win_rate': home_perf.get('win_rate', 0.33),
             'conceded_avg': match_data.get('home_goals_conceded', 0) / 5.0,
             'goals_scored': match_data.get('home_goals_scored', 0)
         }
         match_data['away_stats'] = {
-            'away_win_rate': away_perf.get('win_rate', 0.11), 
+            'away_win_rate': away_perf.get('win_rate', 0.11), 
             'conceded_avg': match_data.get('away_goals_conceded', 0) / 5.0,
             'goals_scored': match_data.get('away_goals_scored', 0)
         }
-        
+        
         match_data['opponent_rank'] = away_ranking
         base_score_diff = home_total_score - away_total_score
-        odds_trend_data = {'pin_change': pin_chg_h} 
-        
+        odds_trend_data = {'pin_change': pin_chg_h} 
+        
         v50_result = PrecisionValidatorV50_Ultimate.validate_decision(
-            match_data, 
-            base_score_diff, 
-            odds_trend_data, 
+            match_data, 
+            base_score_diff, 
+            odds_trend_data, 
             risk_eval['level']
         )
-        
+        
         v37_res = v50_result
         v50_status = v50_result['status']
         v50_confidence = v50_result['confidence']
         v50_log = v50_result['log']
-        
+        
         quality_eval = self.smart_no_recommendation.evaluate_recommendation_quality(rec_kelly, draw_risk_val, '🟢 正常', rec_side)
 
         if v50_status == "SKIP":
@@ -1621,9 +1621,9 @@ class SmartBettingSystemV293:
             quality_eval['should_recommend'] = True
             quality_eval['confidence_level'] = "極高" if v37_res['confidence'] > 0.8 else "中"
             optimal_bet = self.kelly_optimizer.calculate_optimal_bet(rec_kelly, self.bankroll, self.risk_preference, quality_eval['confidence_level'])
-                
+                
         final_reasoning = f"【V3.7 架構】\n🛡️ 校驗: {v37_res['log']}\n" + " | ".join(correction_msg + quality_eval['reasons'])
-        
+        
         return {
             'scored_avg_h':    judge_h_data['scored_avg'],
             'conceded_avg_h': judge_h_data['conceded_avg'],
@@ -1638,12 +1638,12 @@ class SmartBettingSystemV293:
             'home_expected_goals': poisson_result['home_expected_goals'] if poisson_result else 0,
             'away_expected_goals': poisson_result['away_expected_goals'] if poisson_result else 0,
             'draw_risk': draw_risk_val * 100, 'consistency': '高度一致',
-            'recommended_team': rec_team, 'recommended_kelly': rec_kelly, 
-            'recommended_odds': rec_odds, 'quality_evaluation': quality_eval, 
+            'recommended_team': rec_team, 'recommended_kelly': rec_kelly, 
+            'recommended_odds': rec_odds, 'quality_evaluation': quality_eval, 
             'optimal_bet': optimal_bet, 'strategy_used': strategy_used,
             'reasoning': final_reasoning,
-            
-            'v37_status': v50_status,       
+            
+            'v37_status': v50_status,       
             'v37_confidence': f"{v50_confidence:.2f}",
             'v37_log': v50_log,
             'v50_status': v50_status,
@@ -1666,7 +1666,7 @@ class SmartBettingSystemV293:
             'odds_source_name': match_data.get('odds_source_name', 'Manual'),
             'odds_trend_description': match_data.get('odds_change', {}).get('trend_description', '平穩'),
             'pin_early': f"{pin_data.get('early_home', '-')} / {pin_data.get('early_away', '-')}" if pin_data.get('early_home') else '-',
-            'pin_current': f"{pin_data.get('current_home', '-')} / {pin_data.get('current_away', '-')}" if pin_data.get('current_home') else '-', 
+            'pin_current': f"{pin_data.get('current_home', '-')} / {pin_data.get('current_away', '-')}" if pin_data.get('current_home') else '-', 
             'pin_change': f"{pin_chg_h:+.2f}" if pin_data.get('early_home') else '-',
             'b365_early': f"{b365_data.get('early_home', '-')} / {b365_data.get('early_away', '-')}" if b365_data.get('early_home') else '-',
             'b365_current': f"{b365_data.get('current_home', '-')} / {b365_data.get('current_away', '-')}" if b365_data.get('current_home') else '-',
@@ -1725,14 +1725,14 @@ class SmartBettingSystemV293:
 
 
 def generate_markdown_report(data: dict) -> str:
-    def g(key, default='-'): 
+    def g(key, default='-'): 
         val = data.get(key, default)
         return val if val is not None else default
-        
-    def f(key, fmt='{:.1f}'): 
+        
+    def f(key, fmt='{:.1f}'): 
         try: return fmt.format(float(data.get(key, 0)))
         except: return '0.0'
-        
+        
     if 'scored_avg_h' not in data: data['scored_avg_h'] = data.get('home_goals_scored', 0) / 5.0
     if 'conceded_avg_h' not in data: data['conceded_avg_h'] = data.get('home_goals_conceded', 0) / 5.0
     if 'scored_avg_a' not in data: data['scored_avg_a'] = data.get('away_goals_scored', 0) / 5.0
@@ -1741,18 +1741,18 @@ def generate_markdown_report(data: dict) -> str:
     mr = data.get('market_resonance', {})
     kelly_curr = mr.get('kelly_curr', '-')
     kelly_sig = mr.get('kelly_signal', 'Neutral')
-    
+    
     if kelly_sig in ['Guard', 'SuperGuard']: kelly_icon = "🛡️"
     elif kelly_sig == 'Trap': kelly_icon = "🚨"
     else: kelly_icon = "-"
-    
+    
     ou_trend = mr.get('ou_trend', 'Flat')
     ou_icon = "🌊" if ou_trend != 'Flat' else "-"
-    
+    
     euro_odds = mr.get('euro_odds', 0)
     theo_hdp = mr.get('theo_hdp', 0)
     theo_diff = mr.get('theo_diff', 0)
-    
+    
     anchor_msg = "正常"
     if theo_diff >= 0.5: anchor_msg = "⚓ 歐亞陷阱 (誘盤)"
     elif theo_diff <= -0.5: anchor_msg = "🛡️ 莊家信心 (防範)"
@@ -1763,7 +1763,7 @@ def generate_markdown_report(data: dict) -> str:
         h_i, a_i = int(round(h_exp)), int(round(a_exp))
         scores = set()
         scores.add(f"{h_i}-{a_i}")
-        if h_exp > a_exp: 
+        if h_exp > a_exp: 
             scores.add(f"{h_i+1}-{a_i}")
             scores.add(f"{h_i}-{max(0, a_i-1)}")
         else:
@@ -1873,11 +1873,11 @@ def main():
     with tab1:
         st.info("請上傳賠率圖或積分榜 (手機可直接影相)")
         uploaded_file = st.file_uploader("選擇圖片", type=['png', 'jpg', 'jpeg'])
-       
+       
         if uploaded_file is not None:
             image = Image.open(uploaded_file)
             st.image(image, caption='預覽圖片', use_column_width=True)
-           
+           
             if st.button("開始識別文字 (OCR)"):
                 with st.spinner('🔍 AI 正在讀取圖片文字...'):
                     try:
@@ -1889,7 +1889,7 @@ def main():
 
     st.subheader("📊 數據確認區")
     raw_text = st.text_area(
-        "請確認或修改數據:", 
+        "請確認或修改數據:", 
         value=ocr_result if ocr_result else "",
         height=300,
         placeholder="圖片識別後的文字會出現在這裡，你也可以直接貼上文字..."
@@ -1902,22 +1902,23 @@ def main():
             with st.spinner('🤖 V6.9.2 核心運算中...'):
                 try:
                     match_data = {'raw_text': raw_text, 'bankroll': bankroll}
-                   
+                   
                     if 'raw_text' in match_data:
                         match_data = DataInjector.inject_manual_data(match_data['raw_text'], match_data)
-                   
+                   
                     system = SmartBettingSystemV293(bankroll=bankroll)
                     report_data = system.analyze_match(match_data, ai_injury_feed=None)
                     final_md = generate_markdown_report(report_data)
-                   
+                   
                     st.markdown("---")
                     st.markdown(final_md)
-                   
+                   
                 except Exception as e:
                     st.error(f"❌ 運行錯誤: {str(e)}")
                     st.warning("請檢查你貼上的代碼是否完整 (Class DataInjector, SmartBettingSystemV293 等)")
 
 if __name__ == "__main__":
     main()
+
 
 
